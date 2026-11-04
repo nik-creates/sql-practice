@@ -5,10 +5,10 @@ React (Vite) frontend, Node/Express backend, persistent query history.
 
 ## Features
 - Single-user login (credentials from env vars, bcrypt hash)
-- PostgreSQL and MySQL engines (MySQL appears once `MYSQL_URL` is set)
+- PostgreSQL and MySQL engines (MySQL appears once `MYSQL_URL` or `MYSQL_HOST` is set)
 - Table tree, Browse / Structure / SQL / History tabs
 - Persistent query history in Postgres (`app.query_history`)
-- Practice data persists: Postgres schema `practice`, MySQL database from `MYSQL_URL`
+- Practice data: Postgres schema `practice`, MySQL database `practice`
 - "Load sample data" creates `employees` and `departments`
 - 10 s query timeout, 1000-row display cap
 
@@ -26,10 +26,16 @@ node -e "console.log(require('bcryptjs').hashSync('YOUR_PASSWORD',10))"
 ```
 Run it from `server/` after `npm install`.
 
-## Deploy on Render
-1. New > Blueprint, pick this repo (uses `render.yaml`: web service + Postgres).
-2. Set env vars: `APP_USER`, `APP_PASS_HASH`, and optionally `MYSQL_URL`.
-3. Render has no managed MySQL. Use any external MySQL and put its URL in `MYSQL_URL`.
+## Deploy on Render (free, Docker)
+The `Dockerfile` builds one image: the Node app plus the official `mysql:8.4` image, so MySQL runs inside the same free web service.
+1. New > Blueprint, pick this repo (uses `render.yaml`: Docker web service + Postgres).
+2. Set env vars: `APP_USER`, `APP_PASS_HASH`. MySQL passwords are generated.
+
+Free-tier caveats:
+- MySQL data is wiped on every restart, redeploy and 15-minute spin-down (no disk on free web services). Use "Load sample data" to recreate tables.
+- 512 MB RAM is tight for MySQL plus Node. MySQL is tuned low (64 MB buffer pool).
+- Free Render Postgres expires after 30 days.
+- To use an external MySQL instead, set `MYSQL_URL`.
 
 ## Notes
 - Practice queries run with full rights inside the configured databases. This is meant for one trusted user.

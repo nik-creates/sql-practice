@@ -37,9 +37,21 @@ const practicePg = new Pool({
 });
 
 // MySQL practice pool (optional).
-const mysqlPool = process.env.MYSQL_URL
+// Configure with MYSQL_URL, or with MYSQL_HOST/PORT/USER/PASSWORD/DATABASE (used by the Docker image).
+const mysqlBase = process.env.MYSQL_URL
+  ? { uri: process.env.MYSQL_URL }
+  : process.env.MYSQL_HOST
+    ? {
+        host: process.env.MYSQL_HOST,
+        port: Number(process.env.MYSQL_PORT || 3306),
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASSWORD,
+        database: process.env.MYSQL_DATABASE,
+      }
+    : null;
+const mysqlPool = mysqlBase
   ? mysql.createPool({
-      uri: process.env.MYSQL_URL,
+      ...mysqlBase,
       connectionLimit: 5,
       connectTimeout: 10000,
       ssl: process.env.MYSQL_SSL === 'false' ? undefined : { rejectUnauthorized: false },

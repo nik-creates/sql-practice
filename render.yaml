@@ -6,10 +6,9 @@ databases:
 services:
   - type: web
     name: sql-practice
-    runtime: node
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     plan: free
-    buildCommand: npm run build
-    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
@@ -22,5 +21,7 @@ services:
         sync: false
       - key: APP_PASS_HASH
         sync: false
-      - key: MYSQL_URL
-        sync: false
+      - key: MYSQL_ROOT_PASSWORD
+        generateValue: true
+      - key: MYSQL_PASSWORD
+        generateValue: true
