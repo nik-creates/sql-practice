@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { checkCredentials, signToken, requireAuth } from './auth.js';
 import {
-  initDb, runQuery, getSchema, addHistory, listHistory, clearHistory, engines,
+  runQuery, getSchema, addHistory, listHistory, clearHistory, engines,
 } from './db.js';
 import { SAMPLE_STATEMENTS } from './sample.js';
 
@@ -77,13 +77,23 @@ app.post('/api/sample', async (req, res) => {
   }
 });
 
+// History lives only in MySQL. If MySQL is down or not configured it is simply empty.
 app.get('/api/history', async (_req, res) => {
-  res.json({ history: await listHistory(100) });
+  try {
+    res.json({ history: await listHistory(100) });
+  } catch (e) {
+    console.error('history:', e.message);
+    res.json({ history: [], error: e.message });
+  }
 });
 
 app.delete('/api/history', async (_req, res) => {
-  await clearHistory();
-  res.json({ ok: true });
+  try {
+    await clearHistory();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // Serve built frontend in production.
@@ -99,9 +109,4 @@ app.use((err, _req, res, _next) => {
 });
 
 const port = process.env.PORT || 3000;
-initDb()
-  .then(() => app.listen(port, () => console.log(`Listening on ${port}`)))
-  .catch((e) => {
-    console.error('Startup failed:', e.message);
-    process.exit(1);
-  });
+app.listen(port, () => console.log(`Listening on ${port}`));

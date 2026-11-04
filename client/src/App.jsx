@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { sql as sqlLang, PostgreSQL, MySQL } from '@codemirror/lang-sql';
-import { keymap } from '@codemirror/view';
-import { githubLight } from '@uiw/codemirror-theme-github';
+import { EditorView, keymap } from '@codemirror/view';
+import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
 import Login from './Login.jsx';
+import Settings from './Settings.jsx';
+import { useSettings } from './settings.js';
 import { api, getToken, clearToken } from './api.js';
+
+// Font family and size follow the CSS variables set from Settings.
+const fontTheme = EditorView.theme({
+  '&': { fontSize: 'var(--code-size)' },
+  '.cm-scroller': { fontFamily: 'var(--code-font)' },
+});
 
 const LABEL = { postgres: 'PostgreSQL', mysql: 'MySQL' };
 const DB_NAME = { postgres: 'practice', mysql: 'practice' };
@@ -12,13 +20,16 @@ const quote = (engine, id) => (engine === 'mysql' ? `\`${id}\`` : `"${id}"`);
 
 export default function App() {
   const [authed, setAuthed] = useState(Boolean(getToken()));
+  const prefs = useSettings();
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
-  return <Workspace onLogout={() => { clearToken(); setAuthed(false); }} />;
+  return <Workspace prefs={prefs} onLogout={() => { clearToken(); setAuthed(false); }} />;
 }
 
-function Workspace({ onLogout }) {
+function Workspace({ onLogout, prefs }) {
+  const { settings, update, reset, resolved } = prefs;
+  const [showSettings, setShowSettings] = useState(false);
   const [engine, setEngine] = useState(localStorage.getItem('engine') || 'postgres');
-  const [available, setAvailable] = useState({ postgres: true, mysql: false });
+  const [available, setAvailable] = useState({ postgres: false, mysql: false });
   const [tab, setTab] = useState('sql');
   const [table, setTable] = useState(null);
   const [tables, setTables] = useState([]);
@@ -37,7 +48,14 @@ function Workspace({ onLogout }) {
     try { setHistory((await api('/history')).history); } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { api('/engines').then(setAvailable).catch(() => {}); loadHistory(); }, [loadHistory]);
+  useEffect(() => {
+    api('/engines').then((av) => {
+      setAvailable(av);
+      // Fall back to a configured engine if the saved one is not available.
+      setEngine((cur) => (av[cur] ? cur : av.postgres ? 'postgres' : av.mysql ? 'mysql' : cur));
+    }).catch(() => {});
+    loadHistory();
+  }, [loadHistory]);
   useEffect(() => { localStorage.setItem('engine', engine); loadSchema(engine); }, [engine, loadSchema]);
   useEffect(() => { localStorage.setItem('query', query); }, [query]);
 
@@ -114,6 +132,15 @@ function Workspace({ onLogout }) {
 
   const cur = tables.find((t) => t.name === table);
   const dialect = engine === 'mysql' ? MySQL : PostgreSQL;
+  const extensions = useMemo(
+    () => [
+      sqlLang({ dialect }),
+      keys.current,
+      fontTheme,
+      ...(settings.wrap ? [EditorView.lineWrapping] : []),
+    ],
+    [dialect, settings.wrap]
+  );
 
   return (
     <div className="pma">
@@ -122,6 +149,7 @@ function Workspace({ onLogout }) {
         <div className="nav-top">
           <button className="icon" title="Home" onClick={() => { setTable(null); setTab('structure'); }}>⌂</button>
           <button className="icon" title="Reload" onClick={() => loadSchema(engine)}>⟳</button>
+          <button className="icon" title="Settings" onClick={() => setShowSettings(true)}>⚙</button>
           <button className="icon" title="Log out" onClick={onLogout}>⎋</button>
         </div>
         <div className="nav-server">
@@ -167,9 +195,10 @@ function Workspace({ onLogout }) {
           {tab === 'sql' && (
             <form className="fieldset" onSubmit={(e) => { e.preventDefault(); exec(query); }}>
               <div className="legend">Run SQL query/queries on database {DB_NAME[engine]}:</div>
-              <CodeMirror value={query} height="200px" theme={githubLight}
-                extensions={[sqlLang({ dialect }), keys.current]} onChange={setQuery}
-                basicSetup={{ lineNumbers: true, foldGutter: false }} />
+              <CodeMirror value={query} height={`${settings.editorHeight}px`}
+                theme={resolved === 'dark' ? githubDark : githubLight}
+                extensions={extensions} onChange={setQuery}
+                basicSetup={{ lineNumbers: settings.lineNumbers, foldGutter: false }} />
               <div className="foot">
                 <span className="hint">Ctrl/Cmd+Enter to run</span>
                 <button type="button" onClick={() => setQuery('')}>Clear</button>
@@ -248,6 +277,9 @@ function Workspace({ onLogout }) {
           )}
         </div>
       </section>
+      {showSettings && (
+        <Settings settings={settings} update={update} reset={reset} onClose={() => setShowSettings(false)} />
+      )}
     </div>
   );
 }
