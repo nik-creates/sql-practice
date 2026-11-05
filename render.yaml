@@ -25,3 +25,10 @@ services:
         generateValue: true
       - key: MYSQL_PASSWORD
         generateValue: true
+      - key: NODE_ENV
+        value: production
+      # Cloudflare Turnstile. Site key is public and used at client build time.
+      - key: VITE_TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET
+        sync: false
