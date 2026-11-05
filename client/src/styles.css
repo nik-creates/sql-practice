@@ -71,6 +71,7 @@ input[type='file']::file-selector-button { background: var(--btn-top); border: 1
 .login { width: 360px; display: grid; gap: 14px; padding: 28px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .login h1 { margin: 0 0 8px; font-size: 1.8em; color: var(--link); text-align: center; }
 .login .err { color: var(--bad-bd); text-align: center; font-size: 0.95em; }
+.login .ts { display: flex; justify-content: center; min-height: 65px; }
 .login .primary { background: linear-gradient(var(--go-top), var(--go-bot)); color: #fff; border-color: var(--go-bd); padding: 8px; font-size: 1.05em; }
 
 /* Layout */
