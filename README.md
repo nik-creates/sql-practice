@@ -10,25 +10,41 @@ A phpMyAdmin-style web app for practising SQL on **PostgreSQL** and **MySQL**.
 - Browse, Structure, SQL, Export, Import and History tabs, with a table tree like phpMyAdmin
 - Switch between PostgreSQL and MySQL from the server dropdown
 - SQL editor with syntax highlighting for each dialect. Run with Go or Ctrl/Cmd+Enter
-- **Save to disk and restore:** export the whole database or one table as a .zip, import it again later
+- **Save to disk and restore:** export the whole database or one table or view as a .zip, import it again later. Tables, data, views and triggers are all kept
 - Persistent query history, stored in a MySQL table, covering both engines
 - One-click sample data (`employees`, `departments`)
 - Settings (gear icon): light, dark or system theme, interface and code fonts, font sizes, editor height, line numbers, line wrap, table density, striped rows. Saved in the browser
 - Safety limits: 10 s query timeout, 1000 rows displayed, login rate limit
 
-## Save and restore your tables
+## Save and restore your work
 The free host wipes MySQL on restart, so keep your work on your own disk.
 
 **Export tab** downloads a .zip containing:
-- `dump.sql`: structure and data. Restores tables exactly (columns, keys, defaults, indexes; PostgreSQL also keeps foreign keys and sequences, MySQL uses its own `SHOW CREATE TABLE`)
+- `dump.sql`: tables (structure and data), views and triggers. Restores them exactly
 - `csv/<table>.csv`: one CSV per table, opens in Excel (empty cell = NULL)
+
+Export the whole database, or pick one table (it brings its own triggers) or one view.
 
 **Import tab** accepts:
 - a `.zip` made by Export (restores from `dump.sql`)
 - a `.sql` dump
 - a `.csv` (file name becomes the table name, column types are guessed)
 
-Rules: tables with the same names are replaced. A dump only imports into the engine it came from. Max 10 MB per upload and 100,000 rows per table. A failed PostgreSQL import changes nothing (it runs as one transaction). Views, triggers and routines are not exported.
+### What is saved
+| Object | PostgreSQL | MySQL |
+| --- | --- | --- |
+| Tables, columns, defaults, keys, indexes | yes | yes |
+| Data | yes | yes |
+| Auto-increment / serial / identity | yes (sequence reset after load) | yes |
+| Foreign keys | yes (added last) | yes |
+| Views | yes (dependency order) | yes (dependency order) |
+| Triggers | yes, with the functions they call | yes (`DEFINER` removed so any user can restore) |
+| Other functions, procedures, events, grants | no | no |
+| Materialized views | no | n/a |
+
+Triggers are created after the data is loaded, so they do not fire during a restore.
+
+Rules: tables and views with the same names are replaced. A dump only imports into the engine it came from. Max 10 MB per upload and 100,000 rows per table. A failed PostgreSQL import changes nothing (it runs as one transaction). Restoring a single table that other tables or views depend on fails with a clear error instead of dropping them.
 
 ## Stack
 | Part | Tech |
@@ -82,10 +98,10 @@ All routes except `/api/health` and `/api/login` need `Authorization: Bearer <to
 | `GET /api/health` | Health check |
 | `POST /api/login` | `{username, password}` returns `{token}` |
 | `GET /api/engines` | Which engines are configured |
-| `GET /api/schema?engine=` | Tables and columns |
+| `GET /api/schema?engine=` | Tables and views with their columns (`kind` is `table` or `view`) |
 | `POST /api/query` | `{engine, sql}` runs a query and logs it |
 | `POST /api/sample` | Creates the sample tables |
-| `GET /api/export?engine=&table=` | Downloads a .zip. Leave `table` out for the whole database |
+| `GET /api/export?engine=&table=` | Downloads a .zip. Leave `table` out for the whole database; `table` can be a table or a view |
 | `POST /api/import?engine=&name=` | Raw file body (.zip, .sql or .csv) |
 | `GET` / `DELETE /api/history` | List or clear history |
 

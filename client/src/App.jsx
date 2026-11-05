@@ -105,11 +105,11 @@ function Workspace({ onLogout, prefs }) {
     setNotice('');
   }
 
-  async function drop(name) {
-    if (!window.confirm(`Really drop table ${name}?`)) return;
+  async function drop(name, kind = 'table') {
+    if (!window.confirm(`Really drop ${kind} ${name}?`)) return;
     setTab('structure');
     setTable(null);
-    await exec(`DROP TABLE ${quote(engine, name)}`);
+    await exec(`DROP ${kind === 'view' ? 'VIEW' : 'TABLE'} ${quote(engine, name)}`);
   }
 
   async function loadSample() {
@@ -166,8 +166,9 @@ function Workspace({ onLogout, prefs }) {
         <ul className="tree">
           <li className="db" onClick={() => { setTable(null); setTab('structure'); }}>🗄 {DB_NAME[engine]}</li>
           {tables.map((t) => (
-            <li key={t.name} className={`tbl ${table === t.name ? 'sel' : ''}`} onClick={() => browse(t.name)}>
-              ▦ {t.name}
+            <li key={t.name} className={`tbl ${table === t.name ? 'sel' : ''}`} onClick={() => browse(t.name)}
+              title={t.kind === 'view' ? 'View' : 'Table'}>
+              {t.kind === 'view' ? '◈' : '▦'} {t.name}
             </li>
           ))}
           {tables.length === 0 && <li className="empty">(no tables)</li>}
@@ -227,18 +228,19 @@ function Workspace({ onLogout, prefs }) {
                 <button onClick={loadSample}>Load sample data</button>
               </div>
               <table className="grid">
-                <thead><tr><th>Table</th><th>Columns</th><th colSpan="3">Action</th></tr></thead>
+                <thead><tr><th>Name</th><th>Type</th><th>Columns</th><th colSpan="3">Action</th></tr></thead>
                 <tbody>
                   {tables.map((t) => (
                     <tr key={t.name}>
                       <td><b>{t.name}</b></td>
+                      <td>{t.kind === 'view' ? 'View' : 'Table'}</td>
                       <td>{t.columns.length}</td>
                       <td><a onClick={() => browse(t.name)}>Browse</a></td>
                       <td><a onClick={() => structure(t.name)}>Structure</a></td>
-                      <td><a className="danger" onClick={() => drop(t.name)}>Drop</a></td>
+                      <td><a className="danger" onClick={() => drop(t.name, t.kind)}>Drop</a></td>
                     </tr>
                   ))}
-                  {tables.length === 0 && <tr><td colSpan="5" className="null">No tables found in database. Use the SQL tab to create one.</td></tr>}
+                  {tables.length === 0 && <tr><td colSpan="6" className="null">No tables found in database. Use the SQL tab to create one.</td></tr>}
                 </tbody>
               </table>
             </>

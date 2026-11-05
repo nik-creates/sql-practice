@@ -21,6 +21,7 @@ A personal SQL practice website. The owner wants to write queries against Postgr
 9. Engines kept separate. History stored in its own MySQL table. Keep the design open to other engines.
 10. UX settings: font changer and more (all options were added).
 11. Save tables to the disk, upload them back later, and download again. Whole database and single table. Any format that works; a zip was chosen.
+12. Views and triggers must be saved and restored too (both).
 
 ## Decisions and why
 | Decision | Reason |
@@ -39,6 +40,8 @@ A personal SQL practice website. The owner wants to write queries against Postgr
 | Import takes .zip, .sql or .csv | Zip restores from `dump.sql`; a bare CSV creates a table with guessed types |
 | Postgres data exported as `::text` | Values restore exactly (dates, jsonb, bytea, booleans) with no timezone or float drift |
 | Postgres import runs as one multi-statement query | One implicit transaction, so a failed import changes nothing |
+| Triggers and their functions are created last in the dump | Triggers must not fire while data is restored |
+| MySQL `DEFINER` and `` `db`. `` prefixes are removed from views and triggers | The importing user (`app`) lacks the privilege to set another definer, and the database name may differ between servers |
 
 ## Architecture
 ```
@@ -77,20 +80,23 @@ Render Postgres:   schema `practice` for practice data
 - If MySQL is missing or down, history returns empty instead of erroring.
 - The settings (theme, fonts, sizes) and the engine and query draft live in browser localStorage.
 - DATE values are shown as plain `YYYY-MM-DD` on both engines (`dateStrings` for MySQL, a type parser for Postgres).
+- `/api/schema` returns each object with `kind` (`table` or `view`). Views show in the tree with a different icon and are dropped with `DROP VIEW`.
 
 ### Export and import details
-- Whole-database export drops tables with `CASCADE` on restore; a single-table export does not, so restoring a table that other tables reference fails with a clear error.
-- Postgres dump rebuilds columns, defaults, serial and identity columns (sequences are reset after the data load), generated columns, primary, unique and check constraints, indexes, and foreign keys (added last so order does not matter).
-- MySQL dump uses `SHOW CREATE TABLE`, with `FOREIGN_KEY_CHECKS` off during restore.
+- Whole-database export drops tables and views with `CASCADE` on restore (Postgres); a single-table export does not, so restoring a table that other tables or views depend on fails with a clear error.
+- Dump order: drop views (reverse dependency order), drop and create tables, load data, sequence resets and indexes, foreign keys, create views (dependency order), trigger functions, triggers.
+- Postgres dump rebuilds columns, defaults, serial and identity columns, generated columns, primary, unique and check constraints, indexes and foreign keys. Views come from `pg_get_viewdef`, ordered with `pg_depend`. Triggers come from `pg_get_triggerdef`, and the functions they call from `pg_get_functiondef` (only functions in schema `practice`).
+- MySQL dump uses `SHOW CREATE TABLE`, `SHOW CREATE VIEW` and `SHOW CREATE TRIGGER`, with `FOREIGN_KEY_CHECKS` off during restore. View order comes from `information_schema.view_table_usage`.
+- A single table export includes that table's triggers. A single view export has the view definition and a CSV of its rows, and needs the underlying tables to exist when restored.
 - Dumps start with `-- engine: postgres|mysql`. Importing into the other engine is refused with a clear message.
-- Limits: 10 MB upload, 50 MB unpacked, 100,000 rows per table. Views, triggers and routines are not exported.
+- Limits: 10 MB upload, 50 MB unpacked, 100,000 rows per table. Not exported: materialized views, functions other than trigger functions, procedures, events, grants.
 - CSV import: header row required, empty cell becomes NULL, types guessed (INTEGER, BIGINT, DOUBLE, DATE, else TEXT or VARCHAR), values with leading zeros stay text.
 
 ## Deployment (Render, workspace "My Workspace", region Oregon)
 - Web service `sql-practice`, Docker runtime, free plan, branch `main`.
 - Postgres `sqlpractice-db`, free plan, **expires 2026-12-04** (14-day grace, then deleted).
 - Env vars on the service: `APP_USER`, `APP_PASS_HASH`, `JWT_SECRET`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`, `DATABASE_URL`. Values are in Render, not in the repo.
-- Auto-deploy is set to on commit, but a push on 2026-11-05 did not trigger a deploy. A manual deploy was needed. Check the Render dashboard after pushing.
+- Auto-deploy is set to on commit, but pushes did not trigger a deploy. A manual deploy was needed each time. Check the Render dashboard after pushing.
 - The login username is `nks01x`. The password is set in Render as a bcrypt hash.
 
 ## Free-tier limits
@@ -102,15 +108,16 @@ Render Postgres:   schema `practice` for practice data
 
 ## Verification status
 - Tested locally against PostgreSQL: login, bad login, auth required, sample data, joins, errors, schema, no-database start, dead-Postgres start.
-- Tested locally against PostgreSQL: export then drop everything then import gives an identical second export (tables with serial, identity-style defaults, jsonb, bytea, timestamptz, booleans, NULLs, quotes, newlines, unicode, unique, check, index and foreign key). Single-table and SQL-file import, CSV import with type guessing, CSV-only zip, wrong-engine and bad-file errors, and rollback on a failing import all behaved correctly.
+- Tested locally against PostgreSQL: export, drop everything, import gives an identical second export. Covered serial columns, jsonb, bytea, timestamptz, booleans, NULLs, quotes, newlines, unicode, unique, check, index, foreign keys, two views where one uses the other, and a trigger with its function. After restore the views worked, the trigger did not fire during the data load and did fire on later updates. Single-table export carried its trigger, a single view exported and restored, and restoring a table that a view depends on failed cleanly. Also SQL-file import, CSV import with type guessing, CSV-only zip, wrong-engine and bad-file errors, and rollback on a failing import.
+- Unit-tested: view dependency ordering (chain, diamond, cycle) and the MySQL `DEFINER` and database-prefix cleanup.
 - Tested locally in a browser: login, settings modal, dark theme, font change, Export download, Import of that file, and an invalid file error.
-- **Not tested locally:** anything MySQL (queries, `_sp_history`, export, import), because no MySQL was available in the build sandbox. The Docker image was never built locally. Render built and started it, and the logs showed MySQL ready and the app listening, but nobody has yet confirmed MySQL queries, History, Export and Import in the live UI.
+- **Not tested:** anything MySQL (queries, `_sp_history`, export, import, MySQL views and triggers), because no MySQL was available in the build sandbox. The Docker image was never built locally. Render built and started it, and the logs showed MySQL ready and the app listening, but nobody has yet confirmed MySQL behaviour in the live UI.
 
 ## Known issues and ideas
-- Confirm MySQL queries, History, Export and Import on the live site.
+- Confirm MySQL queries, History, Export and Import (including views and triggers) on the live site.
 - Free Postgres expires 2026-12-04. Then only MySQL works. Create a new free Postgres or use an external one and update `DATABASE_URL`.
 - Practice queries and imports have full rights inside the practice databases. Fine for one user.
-- Possible next steps: persistent external MySQL, saved queries, problem sets with auto-checking answers, scheduled auto-export.
+- Possible next steps: persistent external MySQL, saved queries, problem sets with auto-checking answers, scheduled auto-export, listing triggers in the Structure view.
 
 ## Working preferences of the owner
 - Short, direct replies. Ask clarifying questions instead of assuming.

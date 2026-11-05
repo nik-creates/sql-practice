@@ -23,24 +23,27 @@ export function ExportPane({ engine, label, tables, initialTable, onNotice, onEr
   }
 
   const empty = tables.length === 0;
+  const nViews = tables.filter((t) => t.kind === 'view').length;
+  const nTables = tables.length - nViews;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   return (
     <form className="fieldset" onSubmit={go}>
       <div className="legend">Export from {label}</div>
       <div className="fbody">
         <label className="radio">
           <input type="radio" checked={scope === 'all'} onChange={() => setScope('all')} />
-          Whole database ({tables.length} table{tables.length === 1 ? '' : 's'})
+          Whole database ({plural(nTables, 'table')}, {plural(nViews, 'view')}, with their triggers)
         </label>
         <label className="radio">
           <input type="radio" checked={scope === 'table'} onChange={() => setScope('table')} disabled={empty} />
-          One table
+          One table or view
           <select value={table} onChange={(e) => { setTable(e.target.value); setScope('table'); }} disabled={empty}>
-            {tables.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+            {tables.map((t) => <option key={t.name} value={t.name}>{t.name}{t.kind === 'view' ? ' (view)' : ''}</option>)}
           </select>
         </label>
         <p className="muted">
-          Downloads a .zip with <b>dump.sql</b> (structure and data, restores exactly) and a
-          <b> csv/</b> folder with one CSV per table (opens in Excel).
+          Downloads a .zip with <b>dump.sql</b> (structure, data, views and triggers; restores exactly) and a
+          <b> csv/</b> folder with one CSV per table (opens in Excel). A single table also brings its triggers.
         </p>
       </div>
       <div className="foot">
@@ -86,7 +89,7 @@ export function ImportPane({ engine, label, onDone, onNotice, onError }) {
         </p>
         <p className="muted">
           A dump from PostgreSQL only imports into PostgreSQL, and the same for MySQL.
-          Tables with the same names are replaced. A failed PostgreSQL import changes nothing.
+          Tables and views with the same names are replaced. A failed PostgreSQL import changes nothing.
         </p>
       </div>
       <div className="foot">

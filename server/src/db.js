@@ -41,9 +41,10 @@ function shape(columns, rows, rowCount, command) {
 function groupColumns(rows) {
   const tables = {};
   for (const r of rows) {
-    (tables[r.table_name] ||= []).push({ name: r.column_name, type: r.data_type });
+    const t = (tables[r.table_name] ||= { kind: /VIEW/i.test(r.table_type) ? 'view' : 'table', columns: [] });
+    t.columns.push({ name: r.column_name, type: r.data_type });
   }
-  return Object.entries(tables).map(([name, columns]) => ({ name, columns }));
+  return Object.entries(tables).map(([name, t]) => ({ name, kind: t.kind, columns: t.columns }));
 }
 
 /* ------------------------------------------------------------------ *
@@ -93,8 +94,10 @@ function makePostgres() {
     async schema() {
       await ensureSchema();
       const { rows } = await pool.query(
-        `SELECT table_name, column_name, data_type FROM information_schema.columns
-         WHERE table_schema = 'practice' ORDER BY table_name, ordinal_position`
+        `SELECT c.table_name, c.column_name, c.data_type, t.table_type
+         FROM information_schema.columns c
+         JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+         WHERE c.table_schema = 'practice' ORDER BY c.table_name, c.ordinal_position`
       );
       return groupColumns(rows);
     },
@@ -138,9 +141,12 @@ function makeMysql() {
     },
     async schema() {
       const [rows] = await pool.query(
-        `SELECT table_name AS table_name, column_name AS column_name, data_type AS data_type
-         FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name <> ?
-         ORDER BY table_name, ordinal_position`,
+        `SELECT c.table_name AS table_name, c.column_name AS column_name, c.data_type AS data_type,
+                t.table_type AS table_type
+         FROM information_schema.columns c
+         JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+         WHERE c.table_schema = DATABASE() AND c.table_name <> ?
+         ORDER BY c.table_name, c.ordinal_position`,
         [HISTORY_TABLE]
       );
       return groupColumns(rows);
