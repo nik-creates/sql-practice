@@ -60,3 +60,6 @@ export async function api(path, { method = 'GET', body } = {}) {
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
+
+export const login = (username, password, turnstileToken) =>
+  api('/login', { method: 'POST', body: { username, password, turnstileToken } });

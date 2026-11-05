@@ -11,6 +11,7 @@ import {
 } from './db.js';
 import { SAMPLE_STATEMENTS } from './sample.js';
 import { exportZip, importFile } from './transfer.js';
+import { verifyTurnstile, turnstileSkipped } from './turnstile.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -22,13 +23,44 @@ app.use(express.json({ limit: '200kb' }));
 const MAX_SQL = 20000;
 const validEngine = (e) => e === 'postgres' || e === 'mysql';
 
+// Behind Cloudflare, req.ip is Cloudflare's edge. CF-Connecting-IP carries the real visitor IP.
+// It is only trustworthy when traffic really comes through Cloudflare (see README, security notes).
+const clientIp = (req) => {
+  const h = req.headers['cf-connecting-ip'];
+  return (typeof h === 'string' && h.trim()) || req.ip;
+};
+const limiter = (opts) =>
+  rateLimit({
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: clientIp,
+    ...opts,
+  });
+
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// Global limit for every other /api route, applied before authentication.
+app.use(
+  '/api',
+  limiter({
+    windowMs: 60 * 1000,
+    limit: 120,
+    skip: (req) => req.path === '/health',
+    message: { error: 'Too many requests. Slow down and try again in a minute.' },
+  })
+);
 
 app.post(
   '/api/login',
-  rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }),
-  (req, res) => {
-    const { username, password } = req.body || {};
+  limiter({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+  }),
+  async (req, res) => {
+    const { username, password, turnstileToken } = req.body || {};
+    const human = await verifyTurnstile(turnstileToken, clientIp(req));
+    if (!human.ok) return res.status(human.status).json({ error: human.error });
     if (!checkCredentials(username, password)) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
@@ -146,4 +178,7 @@ app.use((err, _req, res, _next) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Listening on ${port}`));
+app.listen(port, () => {
+  console.log(`Listening on ${port}`);
+  if (turnstileSkipped()) console.warn('Turnstile check is OFF (TURNSTILE_SECRET unset, not production)');
+});

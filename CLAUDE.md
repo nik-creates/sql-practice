@@ -13,6 +13,7 @@ Read [CONTEXT.md](CONTEXT.md) first. It holds the requirements, decisions, archi
 - History lives only in the MySQL table `_sp_history`. Do not move it to Postgres.
 - New engines go in `server/src/db.js` as adapters with `query(sql)` and `schema()`.
 - Theme and font settings use CSS variables in `client/src/styles.css`. Add a variable instead of hard-coding colors.
+- Login must keep the Turnstile check and the rate limiters. `TURNSTILE_SECRET` is never committed; only the public site key is build-time config. Do not remove `NODE_ENV=production` from the `Dockerfile`, or Turnstile would be skipped in production.
 - The free Render tier wipes MySQL on restart. Do not promise persistence for MySQL data.
 - After pushing, check the Render dashboard. Auto-deploy did not trigger once and needed a manual deploy.
 
