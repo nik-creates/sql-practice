@@ -12,7 +12,7 @@ export function ExportPane({ engine, label, tables, initialTable, onNotice, onEr
     onError('');
     onNotice('');
     try {
-      const q = `/export?engine=${engine}${scope === 'table' ? `&table=${encodeURIComponent(table)}` : ''}`;
+      const q = `/export?engine=${engine}${scope === 'table' ? '&table=' + encodeURIComponent(table) : ''}`;
       const name = await download(q, 'export.zip');
       onNotice(`Saved ${name} to your downloads.`);
     } catch (err) {
