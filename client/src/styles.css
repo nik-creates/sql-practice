@@ -100,6 +100,11 @@ input:not([type='checkbox']):not([type='range']) { width: 100%; padding: 5px 8px
 .foot .hint { margin-right: auto; color: var(--muted); font-size: .9em; }
 
 .sqlbox { margin: 0 0 12px; padding: 8px 10px; background: var(--sqlbox); border: 1px solid var(--soft); font: var(--code-size)/1.5 var(--code-font); white-space: pre-wrap; color: var(--text); }
+.fbody { padding: 12px 14px; display: grid; gap: 10px; }
+.fbody p { margin: 0; }
+.fbody .radio { display: flex; align-items: center; gap: 8px; }
+.fbody .radio select { min-width: 160px; }
+.muted { color: var(--muted); }
 .actions { margin-bottom: 10px; }
 .scroll { overflow: auto; }
 .grid { border-collapse: collapse; background: var(--card); }

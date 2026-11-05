@@ -4,29 +4,44 @@ A phpMyAdmin-style web app for practising SQL on **PostgreSQL** and **MySQL**.
 
 **Live:** https://sql-practice-in28.onrender.com
 
-> Hosted on Render's free tier. After 15 idle minutes the service sleeps and the first load takes up to a minute. MySQL data and query history reset on every restart. Login is single-user; the credentials are not in this repo.
+> Hosted on Render's free tier. After 15 idle minutes the service sleeps and the first load takes up to a minute. MySQL data and query history reset on every restart, so use Export to save your tables to disk and Import to bring them back. Login is single-user; the credentials are not in this repo.
 
 ## Features
-- Browse, Structure, SQL and History tabs, with a table tree like phpMyAdmin
+- Browse, Structure, SQL, Export, Import and History tabs, with a table tree like phpMyAdmin
 - Switch between PostgreSQL and MySQL from the server dropdown
 - SQL editor with syntax highlighting for each dialect. Run with Go or Ctrl/Cmd+Enter
+- **Save to disk and restore:** export the whole database or one table as a .zip, import it again later
 - Persistent query history, stored in a MySQL table, covering both engines
 - One-click sample data (`employees`, `departments`)
 - Settings (gear icon): light, dark or system theme, interface and code fonts, font sizes, editor height, line numbers, line wrap, table density, striped rows. Saved in the browser
 - Safety limits: 10 s query timeout, 1000 rows displayed, login rate limit
 
+## Save and restore your tables
+The free host wipes MySQL on restart, so keep your work on your own disk.
+
+**Export tab** downloads a .zip containing:
+- `dump.sql`: structure and data. Restores tables exactly (columns, keys, defaults, indexes; PostgreSQL also keeps foreign keys and sequences, MySQL uses its own `SHOW CREATE TABLE`)
+- `csv/<table>.csv`: one CSV per table, opens in Excel (empty cell = NULL)
+
+**Import tab** accepts:
+- a `.zip` made by Export (restores from `dump.sql`)
+- a `.sql` dump
+- a `.csv` (file name becomes the table name, column types are guessed)
+
+Rules: tables with the same names are replaced. A dump only imports into the engine it came from. Max 10 MB per upload and 100,000 rows per table. A failed PostgreSQL import changes nothing (it runs as one transaction). Views, triggers and routines are not exported.
+
 ## Stack
 | Part | Tech |
 | --- | --- |
 | Frontend | React 18, Vite, CodeMirror 6 |
-| Backend | Node 22, Express, `pg`, `mysql2`, JWT, bcrypt |
+| Backend | Node 22, Express, `pg`, `mysql2`, `fflate` (zip), JWT, bcrypt |
 | Databases | PostgreSQL 16 (Render), MySQL 8.4 (Docker, in the same container) |
 | Hosting | Render free web service (Docker) |
 
 ## How the engines work
 PostgreSQL and MySQL are independent adapters in `server/src/db.js`. Each turns on only when its own env vars are set, and one failing never affects the other. When the free Render Postgres expires, the app keeps running on MySQL.
 
-Query history is stored only in MySQL, in the table `_sp_history`, which is hidden from the table list. Without MySQL, history is empty.
+Query history is stored only in MySQL, in the table `_sp_history`, which is hidden from the table list and never exported. Without MySQL, history is empty.
 
 ## Run locally
 Requires Node 20+ and at least one database.
@@ -70,6 +85,8 @@ All routes except `/api/health` and `/api/login` need `Authorization: Bearer <to
 | `GET /api/schema?engine=` | Tables and columns |
 | `POST /api/query` | `{engine, sql}` runs a query and logs it |
 | `POST /api/sample` | Creates the sample tables |
+| `GET /api/export?engine=&table=` | Downloads a .zip. Leave `table` out for the whole database |
+| `POST /api/import?engine=&name=` | Raw file body (.zip, .sql or .csv) |
 | `GET` / `DELETE /api/history` | List or clear history |
 
 ## Deploy on Render
@@ -80,13 +97,13 @@ The `Dockerfile` builds one image containing the app and the official `mysql:8.4
 3. Set `APP_USER`, `APP_PASS_HASH`, `JWT_SECRET`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` and `DATABASE_URL` (the Postgres internal URL).
 
 ## Free-tier limits
-- MySQL has no disk on a free web service. Data and history are lost on restart, redeploy and sleep.
+- MySQL has no disk on a free web service. Data and history are lost on restart, redeploy and sleep. Export before you leave.
 - 512 MB RAM is shared by Node and MySQL. MySQL is tuned small (64 MB buffer pool).
 - Free Render Postgres expires 30 days after creation.
 - For persistent MySQL, point `MYSQL_URL` at an external MySQL.
 
 ## Security notes
-Meant for one trusted user. Queries run with full rights inside the configured databases, and Postgres queries can reach other schemas. Use `PRACTICE_PG_URL` for isolation.
+Meant for one trusted user. Queries and imports run with full rights inside the configured databases, and Postgres queries can reach other schemas. Use `PRACTICE_PG_URL` for isolation.
 
 ## More
 See [CONTEXT.md](CONTEXT.md) for design decisions, deployment details and known issues.

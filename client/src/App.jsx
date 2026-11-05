@@ -5,6 +5,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
 import Login from './Login.jsx';
 import Settings from './Settings.jsx';
+import { ExportPane, ImportPane } from './Transfer.jsx';
 import { useSettings } from './settings.js';
 import { api, getToken, clearToken } from './api.js';
 
@@ -185,6 +186,8 @@ function Workspace({ onLogout, prefs }) {
           {table && <li className={tab === 'browse' ? 'on' : ''} onClick={() => browse(table)}>Browse</li>}
           <li className={tab === 'structure' ? 'on' : ''} onClick={() => (table ? structure(table) : (setTab('structure'), setResult(null)))}>Structure</li>
           <li className={tab === 'sql' ? 'on' : ''} onClick={() => setTab('sql')}>SQL</li>
+          <li className={tab === 'export' ? 'on' : ''} onClick={() => { setTab('export'); setError(''); setNotice(''); }}>Export</li>
+          <li className={tab === 'import' ? 'on' : ''} onClick={() => { setTab('import'); setError(''); setNotice(''); }}>Import</li>
           <li className={tab === 'history' ? 'on' : ''} onClick={() => { setTab('history'); loadHistory(); }}>History</li>
         </ul>
 
@@ -205,6 +208,17 @@ function Workspace({ onLogout, prefs }) {
                 <button className="go" disabled={running}>{running ? '…' : 'Go'}</button>
               </div>
             </form>
+          )}
+
+          {tab === 'export' && (
+            <ExportPane key={`${engine}-${tables.length}`} engine={engine} label={`${LABEL[engine]} database ${DB_NAME[engine]}`}
+              tables={tables} initialTable={table} onNotice={setNotice} onError={setError} />
+          )}
+
+          {tab === 'import' && (
+            <ImportPane engine={engine} label={`${LABEL[engine]} database ${DB_NAME[engine]}`}
+              onNotice={setNotice} onError={setError}
+              onDone={() => { setTable(null); loadSchema(engine); loadHistory(); }} />
           )}
 
           {tab === 'structure' && !table && (

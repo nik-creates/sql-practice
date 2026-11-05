@@ -2,6 +2,7 @@ import pg from 'pg';
 import mysql from 'mysql2/promise';
 
 const { Pool } = pg;
+pg.types.setTypeParser(1082, (v) => v); // show DATE as 'YYYY-MM-DD', no timezone shifting
 const TIMEOUT_MS = 10000;
 export const MAX_ROWS = 1000;
 const HISTORY_TABLE = '_sp_history';
@@ -80,6 +81,8 @@ function makePostgres() {
     }));
 
   return {
+    pool,
+    ensureSchema,
     async query(sql) {
       await ensureSchema();
       const r = await pool.query({ text: sql, rowMode: 'array' });
@@ -111,16 +114,21 @@ function makeMysql() {
         }
       : null;
   if (!base) return null;
-  const pool = mysql.createPool({
+  // Dates come back as strings so they are shown and exported exactly as stored.
+  const opts = {
     ...base,
-    connectionLimit: 5,
     connectTimeout: 10000,
     timezone: 'Z',
+    dateStrings: true,
+    supportBigNumbers: true,
     ssl: process.env.MYSQL_SSL === 'false' ? undefined : { rejectUnauthorized: false },
-  });
+  };
+  const pool = mysql.createPool({ ...opts, connectionLimit: 5 });
 
   return {
     pool,
+    // Dedicated connection allowing several statements, used only for imports.
+    connectMulti: () => mysql.createConnection({ ...opts, multipleStatements: true }),
     async query(sql) {
       const [rows, fields] = await pool.query({ sql, rowsAsArray: true, timeout: TIMEOUT_MS });
       if (Array.isArray(fields)) {
@@ -140,7 +148,8 @@ function makeMysql() {
   };
 }
 
-const adapters = { postgres: makePostgres(), mysql: makeMysql() };
+export const adapters = { postgres: makePostgres(), mysql: makeMysql() };
+export { HISTORY_TABLE };
 
 export const engines = () =>
   Object.fromEntries(Object.entries(adapters).map(([k, v]) => [k, Boolean(v)]));

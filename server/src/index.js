@@ -10,6 +10,7 @@ import {
   runQuery, getSchema, addHistory, listHistory, clearHistory, engines,
 } from './db.js';
 import { SAMPLE_STATEMENTS } from './sample.js';
+import { exportZip, importFile } from './transfer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -77,6 +78,41 @@ app.post('/api/sample', async (req, res) => {
   }
 });
 
+// Save tables to disk (zip) and restore them later.
+app.get('/api/export', async (req, res) => {
+  const engine = String(req.query.engine);
+  if (!validEngine(engine)) return res.status(400).json({ error: 'Invalid engine' });
+  try {
+    const table = req.query.table ? String(req.query.table) : null;
+    const { filename, data } = await exportZip(engine, table);
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control': 'no-store',
+    });
+    res.send(Buffer.from(data));
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
+});
+
+app.post('/api/import', express.raw({ type: '*/*', limit: '10mb' }), async (req, res) => {
+  const engine = String(req.query.engine);
+  const name = String(req.query.name || '');
+  if (!validEngine(engine)) return res.status(400).json({ error: 'Invalid engine' });
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file received' });
+  try {
+    const result = await importFile(engine, name, req.body);
+    await addHistory({ engine, query: `-- Imported file: ${name}`, success: true })
+      .catch((e) => console.error('history', e.message));
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    await addHistory({ engine, query: `-- Imported file: ${name}`, success: false, error: e.message })
+      .catch((err) => console.error('history', err.message));
+    res.status(e.status || 400).json({ error: e.message });
+  }
+});
+
 // History lives only in MySQL. If MySQL is down or not configured it is simply empty.
 app.get('/api/history', async (_req, res) => {
   try {
@@ -104,6 +140,7 @@ if (fs.existsSync(dist)) {
 }
 
 app.use((err, _req, res, _next) => {
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'File too large (max 10 MB)' });
   console.error(err);
   res.status(500).json({ error: 'Server error' });
 });
